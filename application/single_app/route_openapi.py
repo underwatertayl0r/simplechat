@@ -76,8 +76,11 @@ def register_openapi_routes(app):
                 }), 400
             
             # Save to temporary file for validation
-            file_ext = os.path.splitext(safe_filename)[1]
-            with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
+            # Derive a safe suffix for the temp file from the sanitized filename
+            raw_ext = os.path.splitext(safe_filename)[1].lower()
+            if raw_ext not in {'.yaml', '.yml', '.json'}:
+                raw_ext = '.yaml'
+            with tempfile.NamedTemporaryFile(delete=False, suffix=raw_ext) as tmp_file:
                 file.save(tmp_file.name)
                 temp_path = tmp_file.name
             
