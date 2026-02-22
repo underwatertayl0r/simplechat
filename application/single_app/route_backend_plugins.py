@@ -828,8 +828,20 @@ def get_plugin_auth_types(plugin_type):
     schema_dir = os.path.join(current_app.root_path, 'static', 'json', 'schemas')
     safe_type = re.sub(r'[^a-zA-Z0-9_]', '_', plugin_type).lower()
 
-    definition_path = os.path.join(schema_dir, f'{safe_type}.definition.json')
-    schema_path = os.path.join(schema_dir, 'plugin.schema.json')
+    # Normalize base schema directory
+    schema_dir_norm = os.path.normpath(schema_dir)
+
+    # Build and normalize the expected definition path for this plugin type
+    expected_definition_path = os.path.join(schema_dir_norm, f'{safe_type}.definition.json')
+    normalized_definition_path = os.path.normpath(expected_definition_path)
+
+    # Only treat the path as safe if it exactly matches a file under schema_dir_norm
+    if normalized_definition_path == os.path.join(schema_dir_norm, f'{safe_type}.definition.json'):
+        safe_definition_path = normalized_definition_path
+    else:
+        safe_definition_path = None
+
+    schema_path = os.path.join(schema_dir_norm, 'plugin.schema.json')
 
     allowed_auth_types = []
     source = "schema"
@@ -847,16 +859,16 @@ def get_plugin_auth_types(plugin_type):
         debug_print(f"Failed to read plugin.schema.json: {exc}")
         allowed_auth_types = []
 
-    if os.path.exists(definition_path):
+    if safe_definition_path and os.path.exists(safe_definition_path):
         try:
-            with open(definition_path, 'r', encoding='utf-8') as definition_file:
+            with open(safe_definition_path, 'r', encoding='utf-8') as definition_file:
                 definition = json.load(definition_file)
             allowed_from_definition = definition.get('allowedAuthTypes')
             if isinstance(allowed_from_definition, list) and allowed_from_definition:
                 allowed_auth_types = allowed_from_definition
                 source = "definition"
         except Exception as exc:
-            debug_print(f"Failed to read {definition_path}: {exc}")
+            debug_print(f"Failed to read {safe_definition_path}: {exc}")
 
     if not allowed_auth_types:
         allowed_auth_types = []
