@@ -831,6 +831,14 @@ def get_plugin_auth_types(plugin_type):
     definition_path = os.path.join(schema_dir, f'{safe_type}.definition.json')
     schema_path = os.path.join(schema_dir, 'plugin.schema.json')
 
+    # Normalize and validate definition_path to ensure it stays within schema_dir
+    normalized_definition_path = os.path.normpath(definition_path)
+    schema_dir_norm = os.path.normpath(schema_dir)
+    if normalized_definition_path.startswith(schema_dir_norm + os.sep) or normalized_definition_path == schema_dir_norm:
+        safe_definition_path = normalized_definition_path
+    else:
+        safe_definition_path = None
+
     allowed_auth_types = []
     source = "schema"
 
@@ -847,16 +855,16 @@ def get_plugin_auth_types(plugin_type):
         debug_print(f"Failed to read plugin.schema.json: {exc}")
         allowed_auth_types = []
 
-    if os.path.exists(definition_path):
+    if safe_definition_path and os.path.exists(safe_definition_path):
         try:
-            with open(definition_path, 'r', encoding='utf-8') as definition_file:
+            with open(safe_definition_path, 'r', encoding='utf-8') as definition_file:
                 definition = json.load(definition_file)
             allowed_from_definition = definition.get('allowedAuthTypes')
             if isinstance(allowed_from_definition, list) and allowed_from_definition:
                 allowed_auth_types = allowed_from_definition
                 source = "definition"
         except Exception as exc:
-            debug_print(f"Failed to read {definition_path}: {exc}")
+            debug_print(f"Failed to read {safe_definition_path}: {exc}")
 
     if not allowed_auth_types:
         allowed_auth_types = []
