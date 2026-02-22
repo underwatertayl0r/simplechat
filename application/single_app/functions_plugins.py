@@ -10,6 +10,9 @@ def load_plugin_schema(plugin_type, schema_dir):
     Loads the JSON schema for the given plugin type from the schema_dir.
     Returns the schema dict, or None if not found.
     """
+    # Reject unsafe plugin types to avoid path traversal or unexpected filenames
+    if not is_safe_slug(plugin_type):
+        return None
     # Accept both log_analytics_plugin and log-analytics-plugin naming
     # Accept both log_analytics_plugin and log-analytics-plugin naming, and nested keys
     base_types = [plugin_type, f"{plugin_type}_plugin"]
@@ -20,10 +23,16 @@ def load_plugin_schema(plugin_type, schema_dir):
             f"{base}.metadata.schema.json",
             f"{base}.schema.json",
         ])
+    # Ensure we only ever read files under the provided schema_dir
+    schema_root = os.path.abspath(schema_dir)
     for fname in candidates:
-        path = os.path.join(schema_dir, fname)
-        if os.path.exists(path):
-            with open(path, 'r', encoding='utf-8') as f:
+        path = os.path.join(schema_root, fname)
+        normalized_path = os.path.abspath(path)
+        # Skip any path that would escape the schema_root
+        if not normalized_path.startswith(schema_root + os.sep):
+            continue
+        if os.path.exists(normalized_path):
+            with open(normalized_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
     return None
 
@@ -96,16 +105,24 @@ def get_merged_plugin_settings(plugin_type, current_settings, schema_dir):
     if not is_safe_slug(plugin_type):
         # Reject unsafe plugin types to avoid path traversal or unexpected filenames
         return {}
+    # Normalize schema_dir to an absolute root to prevent path traversal
+    schema_root = os.path.abspath(schema_dir)
     result = {}
     # Use plugin_type as base for schema loading (matches actual schema filenames)
     for nested_key, schema_filename in [
         ("metadata", f"{plugin_type}_plugin.metadata.schema.json"),
         ("additionalFields", f"{plugin_type}_plugin.additional_settings.schema.json")
     ]:
-        schema_path = os.path.join(schema_dir, schema_filename)
+        # Build schema path and ensure it stays within schema_root
+        schema_path = os.path.join(schema_root, schema_filename)
+        normalized_schema_path = os.path.abspath(schema_path)
         current_val = (current_settings or {}).get(nested_key, {})
-        if os.path.exists(schema_path):
-            with open(schema_path, 'r', encoding='utf-8') as f:
+        # Skip any path that would escape the schema_root
+        if not normalized_schema_path.startswith(schema_root + os.sep):
+            result[nested_key] = current_val
+            continue
+        if os.path.exists(normalized_schema_path):
+            with open(normalized_schema_path, 'r', encoding='utf-8') as f:
                 nested_schema = json.load(f)
             result[nested_key] = merge_settings_with_schema(current_val, nested_schema)
         else:
